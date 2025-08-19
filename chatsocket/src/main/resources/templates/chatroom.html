@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${roomName} + ' - Spring Boot 채팅'">채팅방</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            overflow: hidden;
+        }
+        .chat-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .chat-input {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        .message {
+            margin-bottom: 1rem;
+            opacity: 0;
+            animation: slideIn 0.3s ease forwards;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .message.own {
+            text-align: right;
+        }
+        .message.own .message-bubble {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            margin-left: auto;
+        }
+        .message.other .message-bubble {
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            margin-right: auto;
+        }
+        .message.system .message-bubble {
+            background: rgba(255, 193, 7, 0.2);
+            color: #856404;
+            text-align: center;
+            font-style: italic;
+            margin: 0 auto;
+        }
+        .message-bubble {
+            max-width: 70%;
+            padding: 0.75rem 1rem;
+            border-radius: 18px;
+            word-wrap: break-word;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .message-info {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 0.25rem;
+        }
+        .message.own .message-info {
+            text-align: right;
+        }
+        .message.other .message-info {
+            text-align: left;
+        }
+        .message.system .message-info {
+            text-align: center;
+        }
+        .connection-status {
+            padding: 0.5rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        .connection-status.connected {
+            background: rgba(25, 135, 84, 0.2);
+            color: #0f5132;
+        }
+        .connection-status.connecting {
+            background: rgba(255, 193, 7, 0.2);
+            color: #664d03;
+        }
+        .connection-status.disconnected {
+            background: rgba(220, 53, 69, 0.2);
+            color: #842029;
+        }
+        .user-input-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .btn-send {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            border: none;
+            border-radius: 25px;
+            padding: 10px 20px;
+            color: white;
+        }
+        .btn-send:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .btn-leave {
+            background: linear-gradient(45deg, #dc3545, #fd7e14);
+            border: none;
+            border-radius: 25px;
+            color: white;
+        }
+        .typing-indicator {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            margin: 0.5rem 0;
+            font-style: italic;
+            color: rgba(255,255,255,0.7);
+            display: none;
+        }
+        .emoji-picker {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            background: white;
+            border-radius: 10px;
+            padding: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        .emoji-picker button {
+            border: none;
+            background: none;
+            font-size: 1.5rem;
+            margin: 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .emoji-picker button:hover {
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <!-- 채팅방 헤더 -->
+        <div class="chat-header">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h4 class="mb-1">
+                        <i class="fas fa-comments"></i>
+                        <span th:text="${roomName}">채팅방</span>
+                    </h4>
+                    <small class="text-muted">
+                        방 ID: <span th:text="${roomId}">room-id</span>
+                        <span class="ms-3">
+                            <i class="fas fa-users"></i>
+                            접속자 <span id="userCount" th:text="${userCount}">0</span>명
+                        </span>
+                    </small>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div id="connectionStatus" class="connection-status connecting mb-2">
+                        <i class="fas fa-circle-notch fa-spin"></i> 연결 중...
+                    </div>
+                    <a href="/" class="btn btn-leave btn-sm me-2">
+                        <i class="fas fa-home"></i> 홈으로
+                    </a>
+                    <button id="leaveBtn" class="btn btn-leave btn-sm">
+                        <i class="fas fa-sign-out-alt"></i> 나가기
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 사용자 정보 입력 (처음 접속 시) -->
+        <div id="userInputSection" class="user-input-section m-3">
+            <h5><i class="fas fa-user"></i> 채팅 참여</h5>
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <input type="text" id="usernameInput" class="form-control" 
+                           placeholder="사용자명을 입력하세요 (한글/영문/숫자, 2-10자)" 
+                           maxlength="10" required>
+                </div>
+                <div class="col-md-4">
+                    <button id="joinBtn" class="btn btn-primary w-100">
+                        <i class="fas fa-sign-in-alt"></i> 참여하기
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 메시지 표시 영역 -->
+        <div id="chatMessages" class="chat-messages">
+            <div class="typing-indicator" id="typingIndicator">
+                <i class="fas fa-ellipsis-h"></i> 누군가 입력 중...
+            </div>
+        </div>
+
+        <!-- 메시지 입력 영역 -->
+        <div id="chatInputSection" class="chat-input" style="display: none;">
+            <div class="row g-3 align-items-center">
+                <div class="col">
+                    <div class="position-relative">
+                        <input type="text" id="messageInput" class="form-control" 
+                               placeholder="메시지를 입력하세요... (Enter로 전송)"
+                               maxlength="500">
+                        <div class="emoji-picker" id="emojiPicker">
+                            <button type="button" onclick="insertEmoji('😀')">😀</button>
+                            <button type="button" onclick="insertEmoji('😂')">😂</button>
+                            <button type="button" onclick="insertEmoji('😍')">😍</button>
+                            <button type="button" onclick="insertEmoji('🤔')">🤔</button>
+                            <button type="button" onclick="insertEmoji('👍')">👍</button>
+                            <button type="button" onclick="insertEmoji('❤️')">❤️</button>
+                            <button type="button" onclick="insertEmoji('🎉')">🎉</button>
+                            <button type="button" onclick="insertEmoji('🚀')">🚀</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <button id="emojiBtn" class="btn btn-outline-secondary me-2">
+                        <i class="fas fa-smile"></i>
+                    </button>
+                    <button id="sendBtn" class="btn btn-send">
+                        <i class="fas fa-paper-plane"></i> 전송
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/chat-client.js"></script>
+    <script>
+        const roomId = /*[[${roomId}]]*/ 'default-room';
+        const roomName = /*[[${roomName}]]*/ '채팅방';
+        
+        let chatClient = null;
+        let currentUsername = '';
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            const usernameInput = document.getElementById('usernameInput');
+            const joinBtn = document.getElementById('joinBtn');
+            const messageInput = document.getElementById('messageInput');
+            const sendBtn = document.getElementById('sendBtn');
+            const leaveBtn = document.getElementById('leaveBtn');
+            const emojiBtn = document.getElementById('emojiBtn');
+            const emojiPicker = document.getElementById('emojiPicker');
+            
+            // 채팅 참여
+            joinBtn.addEventListener('click', joinChat);
+            usernameInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    joinChat();
+                }
+            });
+            
+            // 메시지 전송
+            sendBtn.addEventListener('click', sendMessage);
+            messageInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+            
+            // 채팅방 나가기
+            leaveBtn.addEventListener('click', function() {
+                if (confirm('정말 채팅방을 나가시겠습니까?')) {
+                    leaveChat();
+                }
+            });
+            
+            // 이모지 피커
+            emojiBtn.addEventListener('click', function() {
+                emojiPicker.style.display = emojiPicker.style.display === 'none' ? 'block' : 'none';
+            });
+            
+            // 이모지 피커 외부 클릭 시 닫기
+            document.addEventListener('click', function(e) {
+                if (!emojiBtn.contains(e.target) && !emojiPicker.contains(e.target)) {
+                    emojiPicker.style.display = 'none';
+                }
+            });
+            
+            // 페이지 떠날 때 연결 해제
+            window.addEventListener('beforeunload', function() {
+                if (chatClient) {
+                    chatClient.disconnect();
+                }
+            });
+        });
+        
+        function joinChat() {
+            const username = document.getElementById('usernameInput').value.trim();
+            
+            if (!username) {
+                alert('사용자명을 입력해주세요.');
+                return;
+            }
+            
+            if (username.length < 2 || username.length > 10) {
+                alert('사용자명은 2-10자 사이로 입력해주세요.');
+                return;
+            }
+            
+            currentUsername = username;
+            
+            // WebSocket 연결
+            chatClient = new ChatClient(roomId, username);
+            chatClient.connect();
+            
+            // UI 전환
+            document.getElementById('userInputSection').style.display = 'none';
+            document.getElementById('chatInputSection').style.display = 'block';
+            document.getElementById('messageInput').focus();
+        }
+        
+        function sendMessage() {
+            const message = document.getElementById('messageInput').value.trim();
+            
+            if (!message || !chatClient) {
+                return;
+            }
+            
+            chatClient.sendMessage(message);
+            document.getElementById('messageInput').value = '';
+        }
+        
+        function leaveChat() {
+            if (chatClient) {
+                chatClient.disconnect();
+            }
+            window.location.href = '/';
+        }
+        
+        function insertEmoji(emoji) {
+            const messageInput = document.getElementById('messageInput');
+            messageInput.value += emoji;
+            messageInput.focus();
+            document.getElementById('emojiPicker').style.display = 'none';
+        }
+        
+        // ChatClient 콜백 함수들
+        function onConnectionStatusChange(status) {
+            const statusElement = document.getElementById('connectionStatus');
+            const statusMap = {
+                'connecting': { icon: 'fa-circle-notch fa-spin', text: '연결 중...', class: 'connecting' },
+                'connected': { icon: 'fa-circle', text: '연결됨', class: 'connected' },
+                'disconnected': { icon: 'fa-circle', text: '연결 끊김', class: 'disconnected' }
+            };
+            
+            const config = statusMap[status] || statusMap['disconnected'];
+            statusElement.className = `connection-status ${config.class}`;
+            statusElement.innerHTML = `<i class="fas ${config.icon}"></i> ${config.text}`;
+        }
+        
+        function onMessageReceived(chatMessage) {
+            addMessageToChat(chatMessage);
+        }
+        
+        function addMessageToChat(chatMessage) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageElement = document.createElement('div');
+            
+            const isOwn = chatMessage.sender === currentUsername;
+            const isSystem = chatMessage.type === 'ENTER' || chatMessage.type === 'QUIT';
+            
+            messageElement.className = `message ${isOwn ? 'own' : isSystem ? 'system' : 'other'}`;
+            
+            const timeStr = new Date(chatMessage.timestamp).toLocaleTimeString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            let messageHtml = '';
+            
+            if (isSystem) {
+                messageHtml = `
+                    <div class="message-info">${timeStr}</div>
+                    <div class="message-bubble">${chatMessage.message}</div>
+                `;
+            } else {
+                messageHtml = `
+                    <div class="message-info">${chatMessage.sender} • ${timeStr}</div>
+                    <div class="message-bubble">${escapeHtml(chatMessage.message)}</div>
+                `;
+            }
+            
+            messageElement.innerHTML = messageHtml;
+            messagesContainer.appendChild(messageElement);
+            
+            // 스크롤 하단으로 이동
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

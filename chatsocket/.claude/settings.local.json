@@ -4,7 +4,8 @@
       "Bash(mkdir:*)",
       "Bash(git add:*)",
       "Bash(git push:*)",
-      "Bash(./mvnw clean compile)"
+      "Bash(./mvnw clean compile)",
+      "Bash(./mvnw test)"
     ],
     "deny": [],
     "ask": []

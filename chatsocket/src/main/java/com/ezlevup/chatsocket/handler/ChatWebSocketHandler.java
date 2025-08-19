@@ -34,6 +34,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        // 세션 제한 확인 (최대 1000개 세션)
+        if (sessions.size() >= 1000) {
+            logger.warn("최대 세션 수 초과, 연결 거부: {}", session.getId());
+            session.close(CloseStatus.SERVICE_OVERLOAD);
+            return;
+        }
+        
         sessions.add(session);
         logger.info("웹소켓 연결: {}", session.getId());
         logger.info("현재 연결된 세션 수: {}", sessions.size());
@@ -42,10 +49,25 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String payload = message.getPayload();
-        logger.info("받은 메시지: {}", payload);
+        
+        // 메시지 크기 제한 (최대 1KB)
+        if (payload.length() > 1024) {
+            logger.warn("메시지 크기 초과 - 세션 ID: {}, 크기: {}bytes", session.getId(), payload.length());
+            sendErrorMessage(session, "메시지가 너무 깁니다. (최대 1KB)");
+            return;
+        }
+        
+        logger.info("받은 메시지: {}", payload.length() > 100 ? payload.substring(0, 100) + "..." : payload);
         
         try {
             ChatMessage chatMessage = objectMapper.readValue(payload, ChatMessage.class);
+            
+            // 메시지 내용 검증
+            if (chatMessage.getMessage() != null && chatMessage.getMessage().length() > 500) {
+                sendErrorMessage(session, "메시지 내용이 너무 깁니다. (최대 500자)");
+                return;
+            }
+            
             handleMessageByType(session, chatMessage);
         } catch (Exception e) {
             logger.error("메시지 파싱 오류 - 세션 ID: {}, 오류: {}", session.getId(), e.getMessage());

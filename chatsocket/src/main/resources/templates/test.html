@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Connection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .connecting { background-color: #fff3cd; color: #856404; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .log { border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px; margin: 10px 0; }
+        input, button { padding: 10px; margin: 5px; }
+        button { background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebSocket 연결 테스트</h1>
+        
+        <div id="status" class="status disconnected">연결 끊김</div>
+        
+        <div>
+            <button id="connectBtn">연결</button>
+            <button id="disconnectBtn">연결 해제</button>
+        </div>
+        
+        <div>
+            <input type="text" id="roomIdInput" placeholder="방 ID (예: test-room)" value="test-room">
+            <input type="text" id="usernameInput" placeholder="사용자명" value="testuser">
+            <button id="joinBtn">입장</button>
+        </div>
+        
+        <div>
+            <input type="text" id="messageInput" placeholder="메시지 입력" style="width: 60%;">
+            <button id="sendBtn">전송</button>
+        </div>
+        
+        <div id="log" class="log"></div>
+        
+        <div>
+            <button onclick="clearLog()">로그 지우기</button>
+            <button onclick="testConnection()">연결 테스트</button>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        let isConnected = false;
+        
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const joinBtn = document.getElementById('joinBtn');
+        const sendBtn = document.getElementById('sendBtn');
+        const roomIdInput = document.getElementById('roomIdInput');
+        const usernameInput = document.getElementById('usernameInput');
+        const messageInput = document.getElementById('messageInput');
+        
+        function updateStatus(status, message) {
+            statusEl.className = 'status ' + status;
+            statusEl.textContent = message;
+            log('STATUS: ' + message);
+        }
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logEl.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        
+        function clearLog() {
+            logEl.innerHTML = '';
+        }
+        
+        function connect() {
+            if (isConnected) {
+                log('이미 연결되어 있습니다.');
+                return;
+            }
+            
+            updateStatus('connecting', '연결 중...');
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            const url = `${protocol}//${host}/ws/chat`;
+            
+            log('연결 시도: ' + url);
+            
+            socket = new WebSocket(url);
+            
+            socket.onopen = function(event) {
+                isConnected = true;
+                updateStatus('connected', '연결됨');
+                log('WebSocket 연결 성공');
+            };
+            
+            socket.onmessage = function(event) {
+                log('메시지 수신: ' + event.data);
+                try {
+                    const message = JSON.parse(event.data);
+                    log(`파싱된 메시지 - 타입: ${message.type}, 발신자: ${message.sender}, 내용: ${message.message}`);
+                } catch (e) {
+                    log('메시지 파싱 실패: ' + e.message);
+                }
+            };
+            
+            socket.onclose = function(event) {
+                isConnected = false;
+                updateStatus('disconnected', '연결 끊김');
+                log(`WebSocket 연결 종료 - 코드: ${event.code}, 이유: ${event.reason}`);
+            };
+            
+            socket.onerror = function(error) {
+                log('WebSocket 오류: ' + error);
+                updateStatus('disconnected', '연결 오류');
+            };
+        }
+        
+        function disconnect() {
+            if (socket) {
+                socket.close();
+                socket = null;
+            }
+        }
+        
+        function joinRoom() {
+            if (!isConnected) {
+                log('먼저 연결해주세요.');
+                return;
+            }
+            
+            const roomId = roomIdInput.value.trim();
+            const username = usernameInput.value.trim();
+            
+            if (!roomId || !username) {
+                log('방 ID와 사용자명을 입력해주세요.');
+                return;
+            }
+            
+            const enterMessage = {
+                type: 'ENTER',
+                roomId: roomId,
+                sender: username,
+                message: username + '님이 입장하셨습니다.'
+            };
+            
+            log('입장 메시지 전송: ' + JSON.stringify(enterMessage));
+            socket.send(JSON.stringify(enterMessage));
+        }
+        
+        function sendMessage() {
+            if (!isConnected) {
+                log('먼저 연결하고 채팅방에 입장해주세요.');
+                return;
+            }
+            
+            const message = messageInput.value.trim();
+            const roomId = roomIdInput.value.trim();
+            const username = usernameInput.value.trim();
+            
+            if (!message || !roomId || !username) {
+                log('모든 필드를 입력해주세요.');
+                return;
+            }
+            
+            const talkMessage = {
+                type: 'TALK',
+                roomId: roomId,
+                sender: username,
+                message: message
+            };
+            
+            log('메시지 전송: ' + JSON.stringify(talkMessage));
+            socket.send(JSON.stringify(talkMessage));
+            messageInput.value = '';
+        }
+        
+        function testConnection() {
+            log('=== 연결 테스트 시작 ===');
+            connect();
+            
+            setTimeout(() => {
+                if (isConnected) {
+                    log('자동 입장 테스트...');
+                    joinRoom();
+                    
+                    setTimeout(() => {
+                        messageInput.value = 'Hello WebSocket!';
+                        sendMessage();
+                    }, 1000);
+                }
+            }, 1000);
+        }
+        
+        // 이벤트 리스너
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        joinBtn.addEventListener('click', joinRoom);
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

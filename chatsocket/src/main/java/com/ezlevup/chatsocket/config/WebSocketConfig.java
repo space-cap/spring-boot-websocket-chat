@@ -18,12 +18,18 @@ public class WebSocketConfig implements WebSocketConfigurer {
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(chatWebSocketHandler(), "/ws/chat")
                 .setAllowedOrigins("*")
+                .setAllowedOriginPatterns("*")
                 .withSockJS()
                 .setHeartbeatTime(25000)
                 .setDisconnectDelay(5000)
                 .setStreamBytesLimit(128 * 1024)
                 .setHttpMessageCacheSize(1000)
                 .setSessionCookieNeeded(false);
+                
+        // SockJS 없는 순수 WebSocket 핸들러도 추가
+        registry.addHandler(chatWebSocketHandler(), "/ws/chat")
+                .setAllowedOrigins("*")
+                .setAllowedOriginPatterns("*");
     }
 
     @Bean

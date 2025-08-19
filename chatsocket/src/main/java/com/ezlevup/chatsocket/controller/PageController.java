@@ -37,7 +37,7 @@ public class PageController {
         }
     }
 
-    @GetMapping("/chat/room/{roomId}")
+    @GetMapping("/room/{roomId}")
     public ModelAndView chatRoom(@PathVariable String roomId) {
         try {
             Optional<ChatRoom> roomOpt = chatRoomRepository.findRoomById(roomId);
@@ -80,5 +80,11 @@ public class PageController {
     public String errorPage(Model model) {
         model.addAttribute("error", "오류가 발생했습니다.");
         return "error";
+    }
+    
+    @GetMapping("/test")
+    public String testPage() {
+        logger.info("WebSocket 테스트 페이지 접근");
+        return "test";
     }
 }

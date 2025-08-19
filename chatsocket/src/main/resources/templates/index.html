@@ -105,7 +105,7 @@
                             </span>
                         </div>
                         <div class="col-2 text-end">
-                            <a th:href="@{'/chat/room/' + ${room.roomId}}" 
+                            <a th:href="@{'/room/' + ${room.roomId}}" 
                                class="btn btn-success btn-sm">
                                 <i class="fas fa-sign-in-alt"></i> 입장
                             </a>
@@ -188,7 +188,7 @@
                     if (response.ok) {
                         const room = await response.json();
                         showAlert(`채팅방 "${room.name}"이 생성되었습니다!`, function() {
-                            window.location.href = `/chat/room/${room.roomId}`;
+                            window.location.href = `/room/${room.roomId}`;
                         });
                     } else {
                         showAlert('채팅방 생성에 실패했습니다.');

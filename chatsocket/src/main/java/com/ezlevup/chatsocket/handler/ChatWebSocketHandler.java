@@ -59,6 +59,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         
         logger.info("받은 메시지: {}", payload.length() > 100 ? payload.substring(0, 100) + "..." : payload);
         
+        // PING 메시지 처리
+        if (payload.contains("\"type\":\"PING\"")) {
+            logger.debug("PING 메시지 수신 - 세션 ID: {}", session.getId());
+            return; // PING 메시지는 무시
+        }
+        
         try {
             ChatMessage chatMessage = objectMapper.readValue(payload, ChatMessage.class);
             
@@ -115,6 +121,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         
+        // 세션에 사용자 정보 저장
+        session.getAttributes().put("sender", sender);
+        
         ChatRoom room = chatRoomRepository.getOrCreateRoom(roomId, "Room " + roomId.substring(0, Math.min(8, roomId.length())));
         room.addSession(session);
         sessionRoomMap.put(session.getId(), roomId);
@@ -135,7 +144,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         chatMessage.setRoomId(roomId);
         logger.info("채팅 메시지: {} -> 방: {}, 내용: {}", chatMessage.getSender(), roomId, chatMessage.getMessage());
         
-        broadcastToRoom(roomId, chatMessage, session);
+        // 모든 사용자에게 메시지 브로드캐스트 (자신 포함)
+        broadcastToRoom(roomId, chatMessage, null);
     }
 
     private void handleUserQuit(WebSocketSession session, ChatMessage chatMessage) {
@@ -173,6 +183,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
         
         ChatRoom room = roomOpt.get();
+        logger.info("방 {} 에 브로드캐스트: {} - 세션 수: {}", roomId, message.getMessage(), room.getSessionCount());
+        
         String messageJson;
         try {
             messageJson = objectMapper.writeValueAsString(message);
@@ -181,17 +193,27 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         
-        room.getSessions().parallelStream()
-                .filter(session -> session.isOpen() && !session.equals(excludeSession))
-                .forEach(session -> {
-                    try {
-                        session.sendMessage(new TextMessage(messageJson));
-                    } catch (IOException e) {
-                        logger.error("메시지 전송 실패 - 세션 ID: {}, 오류: {}", session.getId(), e.getMessage());
-                        room.removeSession(session);
-                        sessions.remove(session);
-                    }
-                });
+        int sentCount = 0;
+        for (WebSocketSession session : room.getSessions()) {
+            if (session.isOpen()) {
+                // TALK 메시지의 경우에만 전송자 제외, 다른 메시지는 모두에게 전송
+                if (message.getType() == MessageType.TALK && session.equals(excludeSession)) {
+                    continue;
+                }
+                
+                try {
+                    session.sendMessage(new TextMessage(messageJson));
+                    sentCount++;
+                    logger.info("메시지 전송 성공 - 세션 ID: {}", session.getId());
+                } catch (IOException e) {
+                    logger.error("메시지 전송 실패 - 세션 ID: {}, 오류: {}", session.getId(), e.getMessage());
+                    room.removeSession(session);
+                    sessions.remove(session);
+                }
+            }
+        }
+        
+        logger.info("브로드캐스트 완료 - 전송된 세션 수: {}/{}", sentCount, room.getSessionCount());
     }
 
     private void sendErrorMessage(WebSocketSession session, String errorMessage) {
